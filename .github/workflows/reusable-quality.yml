@@ -1,0 +1,67 @@
+name: KayzenRoot portable quality baseline
+
+on:
+  workflow_call:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/reusable-quality.yml"
+      - "docs/platform/**"
+
+# Called workflows inherit caller context. Untrusted PR code gets read-only access.
+permissions:
+  contents: read
+
+concurrency:
+  group: portable-quality-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Portable quality / Gitleaks changed-history scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan with pinned Gitleaks v3
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_ENABLE_SUMMARY: "false"
+
+  node:
+    name: Portable quality / root Node project validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout untrusted PR without credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Set up Node.js 22.19
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.19.0
+      - name: Detect scope and run only configured root scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f package.json || ! -f package-lock.json ]]; then
+            echo "Node root: NOT_APPLICABLE (missing package.json or package-lock.json)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          npm ci --ignore-scripts
+          for task in lint typecheck test:unit build; do
+            if node -e 'const p=require("./package.json"); process.exit(p.scripts?.[process.argv[1]] ? 0 : 1)' "$task"; then
+              echo "Running $task" >> "$GITHUB_STEP_SUMMARY"
+              npm run "$task"
+            else
+              echo "$task: NOT_CONFIGURED (requires repo-specific gate)" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
