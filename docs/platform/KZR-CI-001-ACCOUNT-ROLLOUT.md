@@ -96,3 +96,8 @@ Account is a GitHub **personal user**, not an organization-wide policy engine; a
 ## Evidence bundle / STOP
 
 Each repository rollout must record base/head SHA, exact changed paths, before/after required checks, runtime/library dependency search, Gitleaks output, test, lint, typecheck, build and coverage results when applicable, open risks, proposed Checkpoint Delta and independent review. **No consumer migration claimed by this candidate PR.** STOP: never merge/deploy/delete repositories or history, activate paid services, overwrite repo rulesets or update canonical checkpoints automatically.
+
+
+## Correction Delta 1 | Host's missing lockfile
+
+Initial PR HEAD `1b9e05be8f1d0d0d33b80dbcd406676d62db84dc` ran the Gitleaks lane successfully but Node lane failed in `actions/setup-node` because shared templates incorrectly demanded root `package-lock.json` for caching. This host is docs-only. Remove unconditional `cache: npm` and `cache-dependency-path` so docs-only consumers can report `NOT_APPLICABLE` without masking Node build errors. No changes to consumer repositories. Revalidate the exact correction HEAD before any rollout.
